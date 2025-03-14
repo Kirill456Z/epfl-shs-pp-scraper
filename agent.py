@@ -9,7 +9,6 @@ import io
 from string import Formatter
 from browser_use import BrowserConfig, Browser
 
-# Basic configuration
 config = BrowserConfig(
     headless=True
 )

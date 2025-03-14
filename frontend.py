@@ -1,5 +1,4 @@
 import streamlit as st
-import time  # For demonstration purposes
 from agent import main
 import asyncio
 
@@ -22,7 +21,6 @@ class StreamHandler:
         self.text += text
         self.container.markdown(f"```\n{self.text}\n```")
 
-# Button to process inputs
 if st.button("Compute"):
     stream = StreamHandler(output_container)
 
