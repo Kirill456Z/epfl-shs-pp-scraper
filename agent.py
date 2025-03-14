@@ -6,56 +6,50 @@ from dotenv import load_dotenv
 import logging
 import asyncio
 import io
+from string import Formatter
+from browser_use import BrowserConfig, Browser
+
+# Basic configuration
+config = BrowserConfig(
+    headless=True
+)
+
+browser = Browser(config=config)
 
 load_dotenv()
 
-api_key = os.getenv("GEMINI_API_KEY")
-print(api_key)
-
-llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash-flash-exp', api_key=SecretStr(os.getenv('GEMINI_API_KEY')))
-
-agent = Agent(
-    task="Navigate to onlyfans.com and extract the text of the website privacy policy",
-    llm=llm
-)
-
-async def monitor_logs(log_stream):
-    last_position = 0
+class StreamLogHandler(logging.Handler):
+    def __init__(self, stream_handler):
+        super().__init__()
+        self.stream_handler = stream_handler
     
-    while True:
-        current_position = log_stream.tell()
-        
-        log_stream.seek(last_position)
-        new_content = log_stream.read()
-        
-        last_position = log_stream.tell()
-        
-        if new_content:
-            print(f"New log content: {new_content}")
-        
-        await asyncio.sleep(0.1)
+    def emit(self, record):
+        log_message = self.format(record)
+        self.stream_handler.write(log_message + "\n")
 
-async def main(stream):
-    log_stream = io.StringIO()
-    new_handler = logging.StreamHandler(log_stream)
+async def main(stream_handler, website_url, agent_prompt, api_key):
+    keys = {k for _, k, _, _ in Formatter().parse(agent_prompt) if k}
+    if "website_url" not in keys:
+        stream_handler.write("Could not format prompt with a website url.\n\nEnsure the prompt contains placeholder {website_url}")
+        raise ValueError("Could not format prompt with a website url")
+
+    full_prompt = agent_prompt.format(website_url=website_url)
+    llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash-exp', api_key=api_key)
+    agent = Agent(
+        browser=browser,
+        task=full_prompt,
+        llm=llm
+    )
+
+    log_handler = StreamLogHandler(stream_handler)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    log_handler.setFormatter(formatter)
+    
     logger = logging.getLogger('browser_use')
     logger.setLevel(logging.INFO)
-    new_handler.setLevel(logging.INFO)
-    logger.addHandler(new_handler)
-    logger.info("Starting agent")
- 
-    monitor_task = asyncio.create_task(monitor_logs(log_stream))
-    agent_task = asyncio.create_task(agent.run())
+    logger.addHandler(log_handler)
     
-    await agent_task
+    result = await agent.run()
     
-    monitor_task.cancel()
-    try:
-        await monitor_task
-    except asyncio.CancelledError:
-        pass
-
-import asyncio
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    logger.removeHandler(log_handler)
+    return result
