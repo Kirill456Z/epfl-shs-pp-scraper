@@ -13,8 +13,6 @@ config = BrowserConfig(
     headless=True
 )
 
-browser = Browser(config=config)
-
 load_dotenv()
 
 class StreamLogHandler(logging.Handler):
@@ -32,23 +30,28 @@ async def main(stream_handler, website_url, agent_prompt, api_key):
         stream_handler.write("Could not format prompt with a website url.\n\nEnsure the prompt contains placeholder {website_url}")
         raise ValueError("Could not format prompt with a website url")
 
-    full_prompt = agent_prompt.format(website_url=website_url)
-    llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash-exp', api_key=api_key)
-    agent = Agent(
-        browser=browser,
-        task=full_prompt,
-        llm=llm
-    )
+    browser = Browser(config=config)
+    
+    try:
+        full_prompt = agent_prompt.format(website_url=website_url)
+        llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash-exp', api_key=api_key)
+        agent = Agent(
+            browser=browser,
+            task=full_prompt,
+            llm=llm
+        )
 
-    log_handler = StreamLogHandler(stream_handler)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    log_handler.setFormatter(formatter)
-    
-    logger = logging.getLogger('browser_use')
-    logger.setLevel(logging.INFO)
-    logger.addHandler(log_handler)
-    
-    result = await agent.run()
-    
-    logger.removeHandler(log_handler)
-    return result
+        log_handler = StreamLogHandler(stream_handler)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        log_handler.setFormatter(formatter)
+        
+        logger = logging.getLogger('browser_use')
+        logger.setLevel(logging.INFO)
+        logger.addHandler(log_handler)
+        
+        result = await agent.run()
+        
+        logger.removeHandler(log_handler)
+        return result
+    finally:
+        await browser.close()
